@@ -1,0 +1,17 @@
+{
+  "name": "rf69",
+  "keywords": "electricity, energy, monitoring",
+  "description": "rf69 Library",
+  "version": "1.0.0",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/openenergymonitor/rf69.git"
+  },
+  "frameworks": "arduino",
+  "platforms":
+  [
+    "atmelavr",
+    "atmelsam"
+  ]
+}
