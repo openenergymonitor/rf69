@@ -16,6 +16,8 @@
 #define chThdYield() // FIXME should be renamed, ChibiOS leftover
 #endif
 
+#define RF69_SPI_BULK 0
+
 template< typename SPI >
 class RF69 {
   public:

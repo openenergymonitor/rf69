@@ -15,65 +15,41 @@
  SPIF: SPI Interrupt Flag
  
  */
- 
 
 template< int N>
 class SpiDev {
-  static uint8_t spiTransferByte (uint8_t out) {
-#ifdef SPCR
-    SPDR = out;
-    while ((SPSR & (1<<SPIF)) == 0)
-      ;
-    return SPDR;
-#else
-    // ATtiny
-    USIDR = out;
-    byte v1 = bit(USIWM0) | bit(USITC);
-    byte v2 = bit(USIWM0) | bit(USITC) | bit(USICLK);
-    for (uint8_t i = 0; i < 8; ++i) {
-      USICR = v1;
-      USICR = v2;
-    }
-    return USIDR;
-#endif
+  static uint8_t spiTransferByte (uint8_t data) {
+    asm volatile("nop");
+
+    SPI0.DATA = data;
+    while ((SPI0.INTFLAGS & SPI_RXCIF_bm) == 0);  // wait for complete send
+    return SPI0.DATA;                             // read data back
   }
 
 public:
   static void master (int div) {
-    digitalWrite(N, 1);
-    pinMode(N, OUTPUT);
+    digitalWriteFast(PIN_PA7, 1);
+    pinMode(PIN_PA7, OUTPUT);
 
-#ifdef SPCR
-    pinMode(10, OUTPUT);
-    pinMode(11, OUTPUT);
-    pinMode(12, INPUT);
-    pinMode(13, OUTPUT);
+    // SPI.pins(PIN_PA4, PIN_PA5, PIN_PA6);
+    
+    PORTMUX.SPIROUTEA = SPI_MUX | (PORTMUX.SPIROUTEA & (~PORTMUX_SPI0_gm));
 
-    SPCR = _BV(SPE) | _BV(MSTR);
-    SPSR |= _BV(SPI2X);
-#else
-    // ATtiny
-    pinMode(1, OUTPUT); // SS
-    pinMode(4, INPUT);  // MISO 7
-    pinMode(5, OUTPUT); // MOSI 8
-    pinMode(6, OUTPUT); // SCK 9
+    pinMode(PIN_PA6, OUTPUT); // SCK
+    pinMode(PIN_PA4, OUTPUT); // MOSI
 
-    USICR = bit(USIWM0);
-#endif
+    SPI0.CTRLB |= (SPI_SSD_bm);
+    SPI0.CTRLA |= (SPI_ENABLE_bm | SPI_MASTER_bm);
   }
 
   static uint8_t rwReg (uint8_t cmd, uint8_t val) {
-    digitalWrite(N, 0);
+    digitalWriteFast(PIN_PA7, 0);
     spiTransferByte(cmd);
     uint8_t in = spiTransferByte(val);
-    digitalWrite(N, 1);
+    digitalWriteFast(PIN_PA7, 1);
     return in;
   }
 };
 
-#ifdef SPCR
 typedef SpiDev<10> SpiDev10;
-#else
-// ATtiny
-typedef SpiDev<1> SpiDev1;
-#endif
+
