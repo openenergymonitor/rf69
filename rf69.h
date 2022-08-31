@@ -9,16 +9,22 @@
  * Note 2: This is not related to the JeeLib file RF69.h [RF in capital letters]
  */
 
-
-#define RFM69_MAXDATA 62
-
 #ifndef chThdYield
 #define chThdYield() // FIXME should be renamed, ChibiOS leftover
 #endif
 
-#define RF69_SPI_BULK 0
+#ifdef EMONPI2
+  #define SSpin PIN_PA7
+  #define MOSIpin PIN_PA4
+  #define MISOpin PIN_PA5
+  #define SCKpin PIN_PA6
+#elif EMONTX4
+  #define SSpin PIN_PB5
+  #define MOSIpin PIN_PC0
+  #define MISOpin PIN_PC1
+  #define SCKpin PIN_PC2
+#endif
 
-template< typename SPI >
 class RF69 {
   public:
     void init (uint8_t id, uint8_t group, int freq);
@@ -34,12 +40,58 @@ class RF69 {
     uint8_t lna;
     uint8_t myId;
     uint8_t parity;
+    
+    void select() {
+      digitalWriteFast(SSpin, 0);
+    }
+    
+    void unselect() {
+      digitalWriteFast(SSpin, 1);
+    }
+    
+    void spi_init() {
+      pinMode(SSpin, OUTPUT);
+      pinMode(MOSIpin, OUTPUT);
+      pinMode(SCKpin, OUTPUT);
+         
+      unselect();
+      
+      #ifdef EMONPI2
+      PORTMUX.SPIROUTEA = SPI_MUX | (PORTMUX.SPIROUTEA & (~PORTMUX_SPI0_gm));
+      SPI0.CTRLB |= (SPI_SSD_bm);
+      SPI0.CTRLA |= (SPI_ENABLE_bm | SPI_MASTER_bm);      
+      #elif EMONTX4
+      PORTMUX.SPIROUTEA = SPI_MUX | (PORTMUX.SPIROUTEA & (~PORTMUX_SPI1_gm));
+      SPI1.CTRLB |= (SPI_SSD_bm);
+      SPI1.CTRLA |= (SPI_ENABLE_bm | SPI_MASTER_bm);
+      #endif
+    }
+    
+    uint8_t spi_transfer (uint8_t data) {
+      asm volatile("nop");
+      #ifdef EMONPI2
+      SPI0.DATA = data;
+      while ((SPI0.INTFLAGS & SPI_RXCIF_bm) == 0);  // wait for complete send
+      return SPI0.DATA;                             // read data back
+      #elif EMONTX4
+      SPI1.DATA = data;
+      while ((SPI1.INTFLAGS & SPI_RXCIF_bm) == 0);  // wait for complete send
+      return SPI1.DATA;                             // read data back
+      #endif
+    }
 
     uint8_t readReg (uint8_t addr) {
-      return spi.rwReg(addr, 0);
+      select();
+      spi_transfer(addr & 0x7F);
+      uint8_t regval = spi_transfer(0);
+      unselect();
+      return regval;
     }
-    void writeReg (uint8_t addr, uint8_t val) {
-      spi.rwReg(addr | 0x80, val);
+    void writeReg (uint8_t addr, uint8_t value) {
+      select();
+      spi_transfer(addr | 0x80);
+      spi_transfer(value);
+      unselect();
     }
 
   protected:
@@ -85,23 +137,18 @@ class RF69 {
     void setMode (uint8_t newMode);
     void configure (const uint8_t* p);
     void setFrequency (uint32_t freq);
-
-    SPI spi;
+    
     volatile uint8_t mode;
 };
 
-// driver implementation
-
-template< typename SPI >
-void RF69<SPI>::setMode (uint8_t newMode) {
+void RF69::setMode (uint8_t newMode) {
   mode = newMode;
   writeReg(REG_OPMODE, (readReg(REG_OPMODE) & 0xE3) | newMode);
   while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0)
     ;
 }
 
-template< typename SPI >
-void RF69<SPI>::setFrequency (uint32_t hz) {
+void RF69::setFrequency (uint32_t hz) {
   // accept any frequency scale as input, including kHz and MHz
   // multiply by 10 until freq >= 100 MHz (don't specify 0 as input!)
   while (hz < 100000000)
@@ -119,8 +166,7 @@ void RF69<SPI>::setFrequency (uint32_t hz) {
   writeReg(REG_FRFMSB+2, frf << 6);
 }
 
-template< typename SPI >
-void RF69<SPI>::configure (const uint8_t* p) {
+void RF69::configure (const uint8_t* p) {
   while (true) {
     uint8_t cmd = p[0];
     if (cmd == 0)
@@ -132,16 +178,17 @@ void RF69<SPI>::configure (const uint8_t* p) {
 
 static const uint8_t configRegs [] = {
 // POR value is better for first rf_sleep  0x01, 0x00, // OpMode = sleep
+  0x01, 0x04, // OpMode = standby
   0x02, 0x00, // DataModul = packet mode, fsk
   0x03, 0x02, // BitRateMsb, data rate = 49,261 bits/s
   0x04, 0x8A, // BitRateLsb, divider = 32 MHz / 650
-  0x05, 0x02, // FdevMsb = 45 kHz
-  0x06, 0xE1, // FdevLsb = 45 kHz
+  0x05, 0x05, // FdevMsb 90 kHz
+  0x06, 0xC3, // FdevLsb 90 kHz
   0x0B, 0x20, // Low M
   0x11, 0x99, // OutputPower = +7 dBm - was default = max = +13 dBm
-  0x19, 0x4A, // RxBw 100 kHz
-  0x1A, 0x42, // AfcBw 125 kHz
-  0x1E, 0x0C, // AfcAutoclearOn, AfcAutoOn
+  0x19, 0x42, // RxBw 125 kHz
+  //0x1A, 0x42, // AfcBw 125 kHz
+  0x1E, 0x2C, // AfcAutoclearOn, AfcAutoOn
   //0x25, 0x40, //0x80, // DioMapping1 = SyncAddress (Rx)
   0x26, 0x07, // disable clkout
   0x29, 0xA0, // RssiThresh -80 dB
@@ -157,8 +204,7 @@ static const uint8_t configRegs [] = {
   0
 };
 
-template< typename SPI >
-void RF69<SPI>::init (uint8_t id, uint8_t group, int freq) {
+void RF69::init (uint8_t id, uint8_t group, int freq) {
   myId = id;
 
   // b7 = group b7^b5^b3^b1, b6 = group b6^b4^b2^b0
@@ -166,23 +212,26 @@ void RF69<SPI>::init (uint8_t id, uint8_t group, int freq) {
   parity = (parity ^ (parity << 2)) & 0xC0;
 
   // 10 MHz, i.e. 30 MHz / 3 (or 4 MHz if clock is still at 12 MHz)
-  spi.master(3);
+  spi_init();
+  
+  uint32_t start = millis();
+  uint8_t timeout = 50;
   do
     writeReg(REG_SYNCVALUE1, 0xAA);
-  while (readReg(REG_SYNCVALUE1) != 0xAA);
+  while (readReg(REG_SYNCVALUE1) != 0xAA && millis()-start < timeout);
   do
     writeReg(REG_SYNCVALUE1, 0x55);
-  while (readReg(REG_SYNCVALUE1) != 0x55);
+  while (readReg(REG_SYNCVALUE1) != 0x55 && millis()-start < timeout);
 
   configure(configRegs);
-  configure(configRegs); // TODO why is this needed ???
+  configure(configRegs);
+  
   setFrequency(freq);
 
   writeReg(REG_SYNCVALUE2, group);
 }
 
-template< typename SPI >
-void RF69<SPI>::encrypt (const char* key) {
+void RF69::encrypt (const char* key) {
   uint8_t cfg = readReg(REG_PKTCONFIG2) & ~0x01;
   if (key) {
     for (int i = 0; i < 16; ++i) {
@@ -195,60 +244,43 @@ void RF69<SPI>::encrypt (const char* key) {
   writeReg(REG_PKTCONFIG2, cfg);
 }
 
-template< typename SPI >
-void RF69<SPI>::txPower (uint8_t level) {
+void RF69::txPower (uint8_t level) {
   writeReg(REG_PALEVEL, (readReg(REG_PALEVEL) & ~0x1F) | level);
 }
 
-template< typename SPI >
-void RF69<SPI>::sleep () {
+void RF69::sleep () {
   setMode(MODE_SLEEP);
 }
 
-template< typename SPI >
-int RF69<SPI>::receive (void* ptr, int len) {
+int RF69::receive (void* ptr, int len) {
   if (mode != MODE_RECEIVE)
     setMode(MODE_RECEIVE);
   else {
+    /*
+    // Commented out as not being used
     static uint8_t lastFlag;
     if ((readReg(REG_IRQFLAGS1) & IRQ1_RXREADY) != lastFlag) {
       lastFlag ^= IRQ1_RXREADY;
       if (lastFlag) { // flag just went from 0 to 1
         lna = (readReg(REG_LNAVALUE) >> 3) & 0x7;
         rssi = readReg(REG_RSSIVALUE);  // It appears this can report RSSI of the previous packet.
-#if RF69_SPI_BULK
-        spi.enable();
-        spi.transfer(REG_AFCMSB);
-        afc = spi.transfer(0) << 8;
-        afc |= spi.transfer(0);
-        spi.disable();
-#else
         afc = readReg(REG_AFCMSB) << 8;
         afc |= readReg(REG_AFCLSB);
-#endif
       }
-    }
+    }*/
 
     if (readReg(REG_IRQFLAGS2) & IRQ2_PAYLOADREADY) {
-
-#if RF69_SPI_BULK
-      spi.enable();
-      spi.transfer(REG_FIFO);
-      int count = spi.transfer(0);
+      
+      // FIFO access
+      select();
+      spi_transfer(REG_FIFO & 0x7F);
+      int count = spi_transfer(0);
       for (int i = 0; i < count; ++i) {
-        uint8_t v = spi.transfer(0);
+        uint8_t v = spi_transfer(0);
         if (i < len)
           ((uint8_t*) ptr)[i] = v;
       }
-      spi.disable();
-#else
-      int count = readReg(REG_FIFO);
-      for (int i = 0; i < count; ++i) {
-        uint8_t v = readReg(REG_FIFO);
-        if (i < len)
-          ((uint8_t*) ptr)[i] = v;
-      }
-#endif
+      unselect();
 
       // only accept packets intended for us, or broadcasts
       // ... or any packet if we're the special catch-all node
@@ -264,29 +296,22 @@ int RF69<SPI>::receive (void* ptr, int len) {
   return -1;
 }
 
-template< typename SPI >
-void RF69<SPI>::send (uint8_t header, const void* ptr, int len) {
-  setMode(MODE_SLEEP);
-#if RF69_SPI_BULK
-  spi.enable();
-  spi.transfer(REG_FIFO | 0x80);
-  spi.transfer(len + 2);
-  spi.transfer((header & 0x3F) | parity);
-  spi.transfer((header & 0xC0) | myId);
-  for (int i = 0; i < len; ++i)
-    spi.transfer(((const uint8_t*) ptr)[i]);
-  spi.disable();
-#else
-  writeReg(REG_FIFO, len + 2);
-  writeReg(REG_FIFO, (header & 0x3F) | parity);
-  writeReg(REG_FIFO, (header & 0xC0) | myId);
-  for (int i = 0; i < len; ++i)
-    writeReg(REG_FIFO, ((const uint8_t*) ptr)[i]);
-#endif
-
+void RF69::send (uint8_t header, const void* ptr, int len) {
+  setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
+  while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0x00); // wait for mode ready
+  
+  // write to FIFO
+  select();
+  spi_transfer(REG_FIFO | 0x80);
+  spi_transfer(len + 2);
+  spi_transfer((header & 0x3F) | parity);
+  spi_transfer((header & 0xC0) | myId);
+  
+  for (uint8_t i = 0; i < len; i++)
+    spi_transfer(((uint8_t*) ptr)[i]);
+  unselect();
+  
   setMode(MODE_TRANSMIT);
-  while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0)
-    chThdYield();
-
+  while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
   setMode(MODE_STANDBY);
 }
