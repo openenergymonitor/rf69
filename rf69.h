@@ -30,7 +30,7 @@
 
 class RF69 {
   public:
-    void init (uint8_t id, uint8_t group, int freq);
+    void init (uint8_t id, uint8_t group, int freq, uint8_t new_version);
     void encrypt (const char* key);
     void txPower (uint8_t level);   // 0 - 31 min -18 dBm, steps of 1 dBm, max = +13 dBm
 
@@ -38,7 +38,8 @@ class RF69 {
 
     void wait_clear();
     void send (uint8_t header, const void* ptr, int len);
-    void send_v1 (uint8_t header, const void* ptr, int len);
+    void send_v2 (uint8_t header, const void* ptr, int len);
+    void send_v1 (uint8_t header, const byte *data, int len);
     void sleep ();
 
     int16_t afc;
@@ -46,6 +47,7 @@ class RF69 {
     uint8_t lna;
     uint8_t myId;
     uint8_t parity;
+    uint8_t version;
     
     void select() {
       digitalWriteFast(SSpin, 0);
@@ -146,8 +148,10 @@ class RF69 {
       REG_RSSI_CONFIG   = 0x23,
       RSSI_START        = 0x01,
       RSSI_DONE         = 0x02,
-      RESTART_RX        = 0x04
-      
+      RESTART_RX        = 0x04,
+      REG_DIOMAPPING1   = 0x25,
+      IRQ2_FIFOFULL     = 0x80,  
+      IRQ2_FIFOOVERRUN  = 0x10  
     };
 
     void setMode (uint8_t newMode);
@@ -192,7 +196,7 @@ void RF69::configure (const uint8_t* p) {
   }
 }
 
-static const uint8_t configRegs [] = {
+static const uint8_t configRegs_v2 [] = {
 // POR value is better for first rf_sleep  0x01, 0x00, // OpMode = sleep
   0x01, 0x04, // OpMode = standby
   0x02, 0x00, // DataModul = packet mode, fsk
@@ -206,7 +210,7 @@ static const uint8_t configRegs [] = {
   //0x1A, 0x42, // AfcBw 125 kHz                                                    rfm69nTxLib: 0x42 (125kHz)
   0x1E, 0x2C, // AfcAutoclearOn, AfcAutoOn                                                       0x80
   //0x25, 0x40, //0x80, // DioMapping1 = SyncAddress (Rx)
-  0x26, 0x07, // disable clkout                                                                  
+  0x26, 0x07, // disable clkout
   0x29, 0xA0, // RssiThresh -80 dB                                                               0xC8 (-100 dB)
   0x2D, 0x05, // PreambleSize = 5
   0x2E, 0x88, // SyncConfig = sync on, sync size = 2
@@ -220,8 +224,27 @@ static const uint8_t configRegs [] = {
   0
 };
 
-void RF69::init (uint8_t id, uint8_t group, int freq) {
+static const uint8_t configRegs_v1 [] = {
+  0x01, 0x04, // OpMode = standby
+  0x02, 0x00, // DataModul = packet mode, fsk
+  0x03, 0x02, // BitRateMsb, data rate = 49,261 bits/s
+  0x04, 0x8A, // BitRateLsb, divider = 32 MHz / 650
+  0x05, 0x05, // FdevMsb 90 kHz
+  0x06, 0xC3, // FdevLsb 90 kHz
+  0x11, 0x99, // OutputPower = +7 dBm - was default = max = +13 dBm
+  0x1E, 0x2C, // AfcAutoclearOn, AfcAutoOn
+  0x25, 0x80,
+  0x26, 0x03, // disable clkout  
+  0x28, 0x00,                                                                
+  0x2E, 0x88, // SyncConfig = sync on, sync size = 2
+  0x2F, 0x2D, // SyncValue1 = 0x2D
+  0x37, 0x00, // PacketConfig1 = variable, white, no filtering
+  0
+};
+
+void RF69::init (uint8_t id, uint8_t group, int freq, uint8_t new_version) {
   myId = id;
+  version = new_version;
 
   // b7 = group b7^b5^b3^b1, b6 = group b6^b4^b2^b0
   parity = group ^ (group << 4);
@@ -239,8 +262,13 @@ void RF69::init (uint8_t id, uint8_t group, int freq) {
     writeReg(REG_SYNCVALUE1, 0x55);
   while (readReg(REG_SYNCVALUE1) != 0x55 && millis()-start < timeout);
 
-  configure(configRegs);
-  configure(configRegs);
+  if (version==1) {
+    configure(configRegs_v1);
+    configure(configRegs_v1);
+  } else if (version==2) {
+    configure(configRegs_v2);
+    configure(configRegs_v2); 
+  }
   
   setFrequency(freq);
 
@@ -339,11 +367,18 @@ void RF69::wait_clear() {
 }
 
 void RF69::send (uint8_t header, const void* ptr, int len) {
+  if (version==1) {
+    send_v1(header,ptr,len);
+  } else if (version==2) {
+    send_v2(header,ptr,len);
+  }
+}
+
+void RF69::send_v2 (uint8_t header, const void* ptr, int len) {
 
   wait_clear();
 
   setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
-  while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0x00); // wait for mode ready
   
   // write to FIFO
   select();
@@ -361,12 +396,53 @@ void RF69::send (uint8_t header, const void* ptr, int len) {
   setMode(MODE_STANDBY);
 }
 
-void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
+void RF69::send_v1 (uint8_t header, const byte *data, int size) {
 
+/*
   setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
   
   uint8_t group = 210;
+ 
+	while (readReg(REG_IRQFLAGS2) & (IRQ2_FIFONOTEMPTY | IRQ2_FIFOOVERRUN))		// Flush FIFO
+        readReg(REG_FIFO);
   
+	writeReg(0x30, group);                                    // RegSyncValue2
+
+  writeReg(REG_DIOMAPPING1, 0x00); 										      // PacketSent
+		
+	volatile uint8_t txstate = 0;
+	byte i = 0;
+	uint16_t crc = _crc16_update(~0, group);	
+
+	while(txstate < 7)
+	{
+		if ((readReg(REG_IRQFLAGS2) & IRQ2_FIFOFULL) == 0)			// FIFO !full
+		{
+			uint8_t next = 0xAA;
+			switch(txstate)
+			{
+			  case 0: next=myId & 0x1F; txstate++; break;    		  // Bits: CTL, DST, ACK, Node ID(5)
+			  case 1: next=size; txstate++; break;				   	    // No. of payload bytes
+			  case 2: next=data[i++]; if(i==size) txstate++; break;
+			  case 3: next=(byte)crc; txstate++; break;
+			  case 4: next=(byte)(crc>>8); txstate++; break;
+			  case 5:
+			  case 6: next=0xAA; txstate++; break; 					      // dummy bytes (if < 2, locks up)
+			}
+			if(txstate<4) crc = _crc16_update(crc, next);
+			writeReg(REG_FIFO, next);								              // RegFifo(next);
+		}
+	}
+    //transmit buffer is now filled, transmit it
+  setMode(MODE_TRANSMIT);
+  while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
+  setMode(MODE_STANDBY);  */
+  
+  wait_clear();
+  
+  setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
+
+  uint8_t group = 210;  
   writeReg(0x30, group);
   uint16_t crc = _crc16_update(~0, group);
   
@@ -377,12 +453,12 @@ void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
   spi_transfer(myId & 0x1F);
   crc = _crc16_update(crc, myId & 0x1F);
   
-  spi_transfer(len);
-  crc = _crc16_update(crc, len);
+  spi_transfer(size);
+  crc = _crc16_update(crc, size);
   
-  for (uint8_t i = 0; i < len; i++) {
-    spi_transfer(((uint8_t*) ptr)[i]);
-    crc = _crc16_update(crc, ((uint8_t*) ptr)[i]);
+  for (uint8_t i = 0; i < size; i++) {
+    spi_transfer(((uint8_t*) data)[i]);
+    crc = _crc16_update(crc, ((uint8_t*) data)[i]);
   }
   spi_transfer((byte)crc);
   spi_transfer((byte)(crc>>8));
@@ -394,4 +470,5 @@ void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
   setMode(MODE_TRANSMIT);
   while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
   setMode(MODE_STANDBY);
+  
 }
