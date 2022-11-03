@@ -8,6 +8,7 @@
  * Note 1: Default transmit power reduced to +7 dBm to avoid damage to RFM if no effective antenna is present.
  * Note 2: This is not related to the JeeLib file RF69.h [RF in capital letters]
  */
+#include <util/crc16.h>
 
 #ifndef chThdYield
 #define chThdYield() // FIXME should be renamed, ChibiOS leftover
@@ -34,8 +35,10 @@ class RF69 {
     void txPower (uint8_t level);   // 0 - 31 min -18 dBm, steps of 1 dBm, max = +13 dBm
 
     int receive (void* ptr, int len);
+
+    void wait_clear();
     void send (uint8_t header, const void* ptr, int len);
-    //void send_v1 (uint8_t header, const void* ptr, int len);
+    void send_v1 (uint8_t header, const void* ptr, int len);
     void sleep ();
 
     int16_t afc;
@@ -139,6 +142,12 @@ class RF69 {
       IRQ2_FIFONOTEMPTY = 1<<6,
       IRQ2_PACKETSENT   = 1<<3,
       IRQ2_PAYLOADREADY = 1<<2,
+      
+      REG_RSSI_CONFIG   = 0x23,
+      RSSI_START        = 0x01,
+      RSSI_DONE         = 0x02,
+      RESTART_RX        = 0x04
+      
     };
 
     void setMode (uint8_t newMode);
@@ -303,7 +312,35 @@ int RF69::receive (void* ptr, int len) {
   return -1;
 }
 
+void RF69::wait_clear() {
+
+  unsigned long t_start = millis();
+  bool success = true;                                                // return false if timed out, else true
+  
+  int threshold = -97;                                                // Signal level below which the radio channel is clear to transmit
+  uint8_t timeout = 25;                                                // Time in ms to wait for the channel to become clear, before transmitting anyway
+  
+  if (timeout) {
+    success = false;
+    setMode(MODE_RECEIVE);
+    while ((millis()-t_start)<(unsigned long)timeout)
+    {
+      while((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0);
+      writeReg(REG_RSSI_CONFIG, RSSI_START);
+      while((readReg(REG_RSSI_CONFIG) & RSSI_DONE) == 0x00); 
+      
+      if (readReg(REG_RSSIVALUE) > (threshold * -2)) {                          // because REG_RSSI_VALUE is upside down!
+        success = true;
+        break;                                                                  // Nothing heard - go ahead and transmit
+      }
+      writeReg(REG_PKTCONFIG2, (readReg(REG_PKTCONFIG2) & 0xFB) | RESTART_RX);  // Restart the receiver
+    }                                                                           // We have waited long enough - go ahead and transmit anyway
+  }
+}
+
 void RF69::send (uint8_t header, const void* ptr, int len) {
+
+  wait_clear();
 
   setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
   while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0x00); // wait for mode ready
@@ -323,12 +360,14 @@ void RF69::send (uint8_t header, const void* ptr, int len) {
   while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
   setMode(MODE_STANDBY);
 }
-/*
+
 void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
 
   setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
-  while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0x00); // wait for mode ready
   
+  uint8_t group = 210;
+  
+  writeReg(0x30, group);
   uint16_t crc = _crc16_update(~0, group);
   
   // write to FIFO
@@ -338,13 +377,13 @@ void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
   spi_transfer(myId & 0x1F);
   crc = _crc16_update(crc, myId & 0x1F);
   
-  spi_transfer(size);
+  spi_transfer(len);
   crc = _crc16_update(crc, len);
   
-  for (uint8_t i = 0; i < len; i++)
+  for (uint8_t i = 0; i < len; i++) {
     spi_transfer(((uint8_t*) ptr)[i]);
     crc = _crc16_update(crc, ((uint8_t*) ptr)[i]);
-    
+  }
   spi_transfer((byte)crc);
   spi_transfer((byte)(crc>>8));
   spi_transfer((byte)(crc>>8));
@@ -355,4 +394,4 @@ void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
   setMode(MODE_TRANSMIT);
   while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
   setMode(MODE_STANDBY);
-}*/
+}
