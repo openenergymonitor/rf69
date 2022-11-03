@@ -18,7 +18,9 @@
   #define MOSIpin PIN_PA4
   #define MISOpin PIN_PA5
   #define SCKpin PIN_PA6
-#elif EMONTX4
+#endif
+     
+#ifdef EMONTX4
   #define SSpin PIN_PB5
   #define MOSIpin PIN_PC0
   #define MISOpin PIN_PC1
@@ -33,6 +35,7 @@ class RF69 {
 
     int receive (void* ptr, int len);
     void send (uint8_t header, const void* ptr, int len);
+    //void send_v1 (uint8_t header, const void* ptr, int len);
     void sleep ();
 
     int16_t afc;
@@ -59,8 +62,10 @@ class RF69 {
       #ifdef EMONPI2
       PORTMUX.SPIROUTEA = SPI_MUX | (PORTMUX.SPIROUTEA & (~PORTMUX_SPI0_gm));
       SPI0.CTRLB |= (SPI_SSD_bm);
-      SPI0.CTRLA |= (SPI_ENABLE_bm | SPI_MASTER_bm);      
-      #elif EMONTX4
+      SPI0.CTRLA |= (SPI_ENABLE_bm | SPI_MASTER_bm);
+      #endif
+           
+      #ifdef EMONTX4
       PORTMUX.SPIROUTEA = SPI_MUX | (PORTMUX.SPIROUTEA & (~PORTMUX_SPI1_gm));
       SPI1.CTRLB |= (SPI_SSD_bm);
       SPI1.CTRLA |= (SPI_ENABLE_bm | SPI_MASTER_bm);
@@ -73,7 +78,9 @@ class RF69 {
       SPI0.DATA = data;
       while ((SPI0.INTFLAGS & SPI_RXCIF_bm) == 0);  // wait for complete send
       return SPI0.DATA;                             // read data back
-      #elif EMONTX4
+      #endif
+           
+      #ifdef EMONTX4
       SPI1.DATA = data;
       while ((SPI1.INTFLAGS & SPI_RXCIF_bm) == 0);  // wait for complete send
       return SPI1.DATA;                             // read data back
@@ -182,16 +189,16 @@ static const uint8_t configRegs [] = {
   0x02, 0x00, // DataModul = packet mode, fsk
   0x03, 0x02, // BitRateMsb, data rate = 49,261 bits/s
   0x04, 0x8A, // BitRateLsb, divider = 32 MHz / 650
-  0x05, 0x05, // FdevMsb 90 kHz
-  0x06, 0xC3, // FdevLsb 90 kHz
+  0x05, 0x05, // FdevMsb 90 kHz                                                     rfm69nTxLib: 0x02
+  0x06, 0xC3, // FdevLsb 90 kHz                                                     rfm69nTxLib: 0xE1
   0x0B, 0x20, // Low M
   0x11, 0x99, // OutputPower = +7 dBm - was default = max = +13 dBm
-  0x19, 0x42, // RxBw 125 kHz
-  //0x1A, 0x42, // AfcBw 125 kHz
-  0x1E, 0x2C, // AfcAutoclearOn, AfcAutoOn
+  0x19, 0x42, // RxBw 125 kHz                                                       rfm69nTxLib: 0x4A (100kHz)
+  //0x1A, 0x42, // AfcBw 125 kHz                                                    rfm69nTxLib: 0x42 (125kHz)
+  0x1E, 0x2C, // AfcAutoclearOn, AfcAutoOn                                                       0x80
   //0x25, 0x40, //0x80, // DioMapping1 = SyncAddress (Rx)
-  0x26, 0x07, // disable clkout
-  0x29, 0xA0, // RssiThresh -80 dB
+  0x26, 0x07, // disable clkout                                                                  
+  0x29, 0xA0, // RssiThresh -80 dB                                                               0xC8 (-100 dB)
   0x2D, 0x05, // PreambleSize = 5
   0x2E, 0x88, // SyncConfig = sync on, sync size = 2
   0x2F, 0x2D, // SyncValue1 = 0x2D
@@ -297,6 +304,7 @@ int RF69::receive (void* ptr, int len) {
 }
 
 void RF69::send (uint8_t header, const void* ptr, int len) {
+
   setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
   while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0x00); // wait for mode ready
   
@@ -315,3 +323,36 @@ void RF69::send (uint8_t header, const void* ptr, int len) {
   while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
   setMode(MODE_STANDBY);
 }
+/*
+void RF69::send_v1 (uint8_t header, const void* ptr, int len) {
+
+  setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
+  while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0x00); // wait for mode ready
+  
+  uint16_t crc = _crc16_update(~0, group);
+  
+  // write to FIFO
+  select();
+  spi_transfer(REG_FIFO | 0x80);
+  
+  spi_transfer(myId & 0x1F);
+  crc = _crc16_update(crc, myId & 0x1F);
+  
+  spi_transfer(size);
+  crc = _crc16_update(crc, len);
+  
+  for (uint8_t i = 0; i < len; i++)
+    spi_transfer(((uint8_t*) ptr)[i]);
+    crc = _crc16_update(crc, ((uint8_t*) ptr)[i]);
+    
+  spi_transfer((byte)crc);
+  spi_transfer((byte)(crc>>8));
+  spi_transfer((byte)(crc>>8));
+  spi_transfer(0xAA);
+  
+  unselect();
+  
+  setMode(MODE_TRANSMIT);
+  while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
+  setMode(MODE_STANDBY);
+}*/
