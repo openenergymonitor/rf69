@@ -126,7 +126,7 @@ class RF69 {
       REG_BCASTADDR     = 0x3A,
       REG_FIFOTHRESH    = 0x3C,
       REG_PKTCONFIG2    = 0x3D,
-      REG_AESKEYMSB     = 0x3E,
+      REG_AESKEY1       = 0x3E,
 
       MODE_SLEEP        = 0<<2,
       MODE_STANDBY      = 1<<2,
@@ -151,7 +151,7 @@ class RF69 {
       RESTART_RX        = 0x04,
       REG_DIOMAPPING1   = 0x25,
       IRQ2_FIFOFULL     = 0x80,  
-      IRQ2_FIFOOVERRUN  = 0x10  
+      IRQ2_FIFOOVERRUN  = 0x10
     };
 
     void setMode (uint8_t newMode);
@@ -201,7 +201,7 @@ static const uint8_t configRegs_v2 [] = {
   0x01, 0x04, // OpMode = standby
   0x02, 0x00, // DataModul = packet mode, fsk
   0x03, 0x02, // BitRateMsb, data rate = 49,261 bits/s
-  0x04, 0x8A, // BitRateLsb, divider = 32 MHz / 650
+  0x04, 0x8A, // BitRateLsb, divider = 32 MHz / 650  (512 + 138)
   0x05, 0x05, // FdevMsb 90 kHz                                                     rfm69nTxLib: 0x02
   0x06, 0xC3, // FdevLsb 90 kHz                                                     rfm69nTxLib: 0xE1
   0x0B, 0x20, // Low M
@@ -276,16 +276,18 @@ void RF69::init (uint8_t id, uint8_t group, int freq, uint8_t new_version) {
 }
 
 void RF69::encrypt (const char* key) {
-  uint8_t cfg = readReg(REG_PKTCONFIG2) & ~0x01;
-  if (key) {
-    for (int i = 0; i < 16; ++i) {
-      writeReg(REG_AESKEYMSB + i, *key);
-      if (*key != 0)
-        ++key;
-    }
-    cfg |= 0x01;
+
+  setMode(MODE_STANDBY);
+  uint8_t validKey = key != 0 && strlen(key)!=0;
+  if (validKey)
+  {
+    select();
+    spi_transfer(REG_AESKEY1 | 0x80);
+    for (uint8_t i = 0; i < 16; i++)
+      spi_transfer(key[i]);
+    unselect();
   }
-  writeReg(REG_PKTCONFIG2, cfg);
+  writeReg(REG_PKTCONFIG2, (readReg(REG_PKTCONFIG2) & 0xFE) | (validKey ? 1 : 0));
 }
 
 void RF69::txPower (uint8_t level) {
