@@ -1,4 +1,4 @@
-# RF69 Native Format Driver
+# RF69 Native Format Library *
 
 This driver is a patched version of the JeeLabs rf69.h driver. The changes are:
 
@@ -9,6 +9,8 @@ antenna.
 2. The point where the RSSI value is extracted has been moved because in the
 original position, the RSSI value of the previous message could occasionally be
 reported.
+
+* Confusingly.. This library also supports sending data in the original JeeLib packet format. Providing a simple way of supporing both formats in the resulting firmware.
 
 ## API
 
