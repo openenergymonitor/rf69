@@ -1,5 +1,5 @@
 /* 
- * Native mode RF69 driver.
+ * Native mode RFM69 driver.
  *
  * Derived from the JeeLabs file rf69.h, with some small changes (RSSI)
  *
@@ -28,9 +28,10 @@
   #define SCKpin PIN_PC2
 #endif
 
-class RF69 {
+class RFM69 {
   public:
-    void init (uint8_t id, uint8_t group, int freq, uint8_t new_version = 2);
+    void set_packet_format(uint8_t new_version = 2);
+    void initialize (int freq, uint8_t id, uint8_t group);
     void encrypt (const char* key);
     void txPower (uint8_t level);   // 0 - 31 min -18 dBm, steps of 1 dBm, max = +13 dBm
 
@@ -161,14 +162,14 @@ class RF69 {
     volatile uint8_t mode;
 };
 
-void RF69::setMode (uint8_t newMode) {
+void RFM69::setMode (uint8_t newMode) {
   mode = newMode;
   writeReg(REG_OPMODE, (readReg(REG_OPMODE) & 0xE3) | newMode);
   while ((readReg(REG_IRQFLAGS1) & IRQ1_MODEREADY) == 0)
     ;
 }
 
-void RF69::setFrequency (uint32_t hz) {
+void RFM69::setFrequency (uint32_t hz) {
   // accept any frequency scale as input, including kHz and MHz
   // multiply by 10 until freq >= 100 MHz (don't specify 0 as input!)
   while (hz < 100000000)
@@ -186,7 +187,7 @@ void RF69::setFrequency (uint32_t hz) {
   writeReg(REG_FRFMSB+2, frf << 6);
 }
 
-void RF69::configure (const uint8_t* p) {
+void RFM69::configure (const uint8_t* p) {
   while (true) {
     uint8_t cmd = p[0];
     if (cmd == 0)
@@ -242,9 +243,12 @@ static const uint8_t configRegs_v1 [] = {
   0
 };
 
-void RF69::init (uint8_t id, uint8_t group, int freq, uint8_t new_version) {
-  myId = id;
+void RFM69::set_packet_format (uint8_t new_version) {
   version = new_version;
+}
+
+void RFM69::initialize (int freq, uint8_t id, uint8_t group) {
+  myId = id;
 
   // b7 = group b7^b5^b3^b1, b6 = group b6^b4^b2^b0
   parity = group ^ (group << 4);
@@ -275,7 +279,8 @@ void RF69::init (uint8_t id, uint8_t group, int freq, uint8_t new_version) {
   writeReg(REG_SYNCVALUE2, group);
 }
 
-void RF69::encrypt (const char* key) {
+void RFM69::encrypt (const char* key) {
+  if (version==1) return;
 
   setMode(MODE_STANDBY);
   uint8_t validKey = key != 0 && strlen(key)!=0;
@@ -290,15 +295,15 @@ void RF69::encrypt (const char* key) {
   writeReg(REG_PKTCONFIG2, (readReg(REG_PKTCONFIG2) & 0xFE) | (validKey ? 1 : 0));
 }
 
-void RF69::txPower (uint8_t level) {
+void RFM69::txPower (uint8_t level) {
   writeReg(REG_PALEVEL, (readReg(REG_PALEVEL) & ~0x1F) | level);
 }
 
-void RF69::sleep () {
+void RFM69::sleep () {
   setMode(MODE_SLEEP);
 }
 
-int RF69::receive (void* ptr, int len) {
+int RFM69::receive (void* ptr, int len) {
   if (mode != MODE_RECEIVE)
     setMode(MODE_RECEIVE);
   else {
@@ -330,7 +335,7 @@ int RF69::receive (void* ptr, int len) {
   return -1;
 }
 
-void RF69::wait_clear() {
+void RFM69::wait_clear() {
 
   unsigned long t_start = millis();
   bool success = true;                                                // return false if timed out, else true
@@ -356,7 +361,7 @@ void RF69::wait_clear() {
   }
 }
 
-void RF69::send (uint8_t header, const void* ptr, int len) {
+void RFM69::send (uint8_t header, const void* ptr, int len) {
   if (version==1) {
     send_v1(header,ptr,len);
   } else if (version==2) {
@@ -364,7 +369,7 @@ void RF69::send (uint8_t header, const void* ptr, int len) {
   }
 }
 
-void RF69::send_v2 (uint8_t header, const void* ptr, int len) {
+void RFM69::send_v2 (uint8_t header, const void* ptr, int len) {
 
   wait_clear();
 
@@ -386,7 +391,7 @@ void RF69::send_v2 (uint8_t header, const void* ptr, int len) {
   setMode(MODE_STANDBY);
 }
 
-void RF69::send_v1 (uint8_t header, const byte *data, int size) {
+void RFM69::send_v1 (uint8_t header, const byte *data, int size) {
   
   wait_clear();
   
