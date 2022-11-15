@@ -28,10 +28,14 @@
   #define SCKpin PIN_PC2
 #endif
 
+#define RF69_433MHZ            43
+#define RF69_868MHZ            86
+#define RF69_915MHZ            91
+
 class RFM69 {
   public:
     void set_packet_format(uint8_t new_version = 2);
-    void initialize (int freq, uint8_t id, uint8_t group);
+    void initialize (uint8_t freq, uint8_t id, uint8_t group);
     void encrypt (const char* key);
     void txPower (uint8_t level);   // 0 - 31 min -18 dBm, steps of 1 dBm, max = +13 dBm
 
@@ -247,7 +251,7 @@ void RFM69::set_packet_format (uint8_t new_version) {
   version = new_version;
 }
 
-void RFM69::initialize (int freq, uint8_t id, uint8_t group) {
+void RFM69::initialize (uint8_t freq, uint8_t id, uint8_t group) {
   myId = id;
 
   // b7 = group b7^b5^b3^b1, b6 = group b6^b4^b2^b0
@@ -274,7 +278,7 @@ void RFM69::initialize (int freq, uint8_t id, uint8_t group) {
     configure(configRegs_v2); 
   }
   
-  setFrequency(freq);
+  setFrequency(434);
 
   writeReg(REG_SYNCVALUE2, group);
 }
