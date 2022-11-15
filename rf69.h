@@ -302,18 +302,6 @@ int RF69::receive (void* ptr, int len) {
   if (mode != MODE_RECEIVE)
     setMode(MODE_RECEIVE);
   else {
-    /*
-    // Commented out as not being used
-    static uint8_t lastFlag;
-    if ((readReg(REG_IRQFLAGS1) & IRQ1_RXREADY) != lastFlag) {
-      lastFlag ^= IRQ1_RXREADY;
-      if (lastFlag) { // flag just went from 0 to 1
-        lna = (readReg(REG_LNAVALUE) >> 3) & 0x7;
-        rssi = readReg(REG_RSSIVALUE);  // It appears this can report RSSI of the previous packet.
-        afc = readReg(REG_AFCMSB) << 8;
-        afc |= readReg(REG_AFCLSB);
-      }
-    }*/
 
     if (readReg(REG_IRQFLAGS2) & IRQ2_PAYLOADREADY) {
       
@@ -399,46 +387,6 @@ void RF69::send_v2 (uint8_t header, const void* ptr, int len) {
 }
 
 void RF69::send_v1 (uint8_t header, const byte *data, int size) {
-
-/*
-  setMode(MODE_STANDBY); // turn off receiver to prevent reception while filling fifo
-  
-  uint8_t group = 210;
- 
-	while (readReg(REG_IRQFLAGS2) & (IRQ2_FIFONOTEMPTY | IRQ2_FIFOOVERRUN))		// Flush FIFO
-        readReg(REG_FIFO);
-  
-	writeReg(0x30, group);                                    // RegSyncValue2
-
-  writeReg(REG_DIOMAPPING1, 0x00); 										      // PacketSent
-		
-	volatile uint8_t txstate = 0;
-	byte i = 0;
-	uint16_t crc = _crc16_update(~0, group);	
-
-	while(txstate < 7)
-	{
-		if ((readReg(REG_IRQFLAGS2) & IRQ2_FIFOFULL) == 0)			// FIFO !full
-		{
-			uint8_t next = 0xAA;
-			switch(txstate)
-			{
-			  case 0: next=myId & 0x1F; txstate++; break;    		  // Bits: CTL, DST, ACK, Node ID(5)
-			  case 1: next=size; txstate++; break;				   	    // No. of payload bytes
-			  case 2: next=data[i++]; if(i==size) txstate++; break;
-			  case 3: next=(byte)crc; txstate++; break;
-			  case 4: next=(byte)(crc>>8); txstate++; break;
-			  case 5:
-			  case 6: next=0xAA; txstate++; break; 					      // dummy bytes (if < 2, locks up)
-			}
-			if(txstate<4) crc = _crc16_update(crc, next);
-			writeReg(REG_FIFO, next);								              // RegFifo(next);
-		}
-	}
-    //transmit buffer is now filled, transmit it
-  setMode(MODE_TRANSMIT);
-  while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
-  setMode(MODE_STANDBY);  */
   
   wait_clear();
   
@@ -472,5 +420,4 @@ void RF69::send_v1 (uint8_t header, const byte *data, int size) {
   setMode(MODE_TRANSMIT);
   while ((readReg(REG_IRQFLAGS2) & IRQ2_PACKETSENT) == 0x00); // wait for packet sent
   setMode(MODE_STANDBY);
-  
 }
