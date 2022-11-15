@@ -17,11 +17,11 @@ Initialises the driver with the NodeID, Group & Frequency. Node ID range is 1 â€
 send-only, 62 is reserved, 63 is receive-all. The OEM default group is 210. Frequency is in
 MHz and can have an arbitrary precision, e.g. 8686 = 868.6 MHz. There is no return value.
 
-**int receive (void* ptr, int len);**<br>
+**int receive (void\* ptr, int len);**<br>
 Returns the actual size of the received packet (0 â€“ 62 bytes). The caller-supplied receive
 buffer pointed to by ptr (of size len) must be large enough to hold the entire packet.
 
-**void send (uint8_t header, const void* ptr, int len);**<br>
+**void send (uint8_t header, const void\* ptr, int len);**<br>
 Transmit the data of length len in the buffer pointed to by ptr. The data must not exceed
 62 bytes. Header is not normally required and should be zero. There is no return value.
 
@@ -36,7 +36,7 @@ level. i.e. to convert to the normal representation:
 
     rfInfo.rssi = -rf.rssi/2;
 
-**void encrypt (const char* key);**<br>
+**void encrypt (const char\* key);**<br>
 Encrypts the data with a 16 character (max) / 128-bit key. If encryption is used, it must be
 used with the same key in all nodes in the same group. Encryption can be disabled with a
 null key:
