@@ -10,7 +10,7 @@ antenna.
 original position, the RSSI value of the previous message could occasionally be
 reported.
 
-* Confusingly.. This library also supports sending data in the original JeeLib packet format. Providing a simple way of supporing both formats in the resulting firmware.
+\* Confusingly.. This library also supports sending data in the original JeeLib packet format. Providing a simple way of supporing both formats in the resulting firmware.
 
 ## API
 
