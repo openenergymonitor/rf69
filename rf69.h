@@ -30,7 +30,7 @@
 
 class RF69 {
   public:
-    void init (uint8_t id, uint8_t group, int freq, uint8_t new_version);
+    void init (uint8_t id, uint8_t group, int freq, uint8_t new_version = 2);
     void encrypt (const char* key);
     void txPower (uint8_t level);   // 0 - 31 min -18 dBm, steps of 1 dBm, max = +13 dBm
 

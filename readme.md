@@ -12,10 +12,10 @@ reported.
 
 ## API
 
-**void init (uint8_t id, uint8_t group, int freq);**<br>
+**void init (uint8_t id, uint8_t group, int freq, uint8_t version);**<br>
 Initialises the driver with the NodeID, Group & Frequency. Node ID range is 1 – 60, 61 is
 send-only, 62 is reserved, 63 is receive-all. The OEM default group is 210. Frequency is in
-MHz and can have an arbitrary precision, e.g. 8686 = 868.6 MHz. There is no return value.
+MHz and can have an arbitrary precision, e.g. 8686 = 868.6 MHz. Version = 1 can be used to transmit data using the original JeeLib format, the default is version = 2 (native format). There is no return value.
 
 **int receive (void\* ptr, int len);**<br>
 Returns the actual size of the received packet (0 – 62 bytes). The caller-supplied receive
