@@ -1,4 +1,4 @@
-#RF69 Native Format Driver
+# RF69 Native Format Driver
 
 This driver is a patched version of the JeeLabs rf69.h driver. The changes are:
 
