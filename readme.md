@@ -2,7 +2,7 @@
 
 1. Supports transmitting data using the standard JeeLib packet format used by OpenEnergyMonitor hardware up to Nov 2022.
 
-2. Supports transmitting and receiving data using a patched version of the native JeeLabs rf69.h driver (Adapted from original by Robert Wall). This makes use of the in-build capabilities of the RFM69 module rather than emulating the RFM12 module via the compatibility mode provided by the standard JeeLib packet format. 
+2. Supports transmitting and receiving data using a patched version of the native JeeLabs rf69.h driver (Adapted from original by Robert Wall). This makes use of the in-built capabilities of the RFM69 module rather than emulating the RFM12 module via the compatibility mode provided by the standard JeeLib packet format. 
 
 ---
 
@@ -16,14 +16,13 @@ antenna.
 original position, the RSSI value of the previous message could occasionally be
 reported.
 
-\* Confusingly.. This library also supports sending data in the original JeeLib packet format. Providing a simple way of supporing both formats in the resulting firmware.
 
 ## API
 
-**void init (uint8_t id, uint8_t group, int freq, uint8_t version);**<br>
+**void initialize (int freq, uint8_t id, uint8_t group);**<br>
 Initialises the driver with the NodeID, Group & Frequency. Node ID range is 1 – 60, 61 is
 send-only, 62 is reserved, 63 is receive-all. The OEM default group is 210. Frequency is in
-MHz and can have an arbitrary precision, e.g. 8686 = 868.6 MHz. Version = 1 can be used to transmit data using the original JeeLib format, the default is version = 2 (native format). There is no return value.
+MHz and can have an arbitrary precision, e.g. 8686 = 868.6 MHz. There is no return value.
 
 **int receive (void\* ptr, int len);**<br>
 Returns the actual size of the received packet (0 – 62 bytes). The caller-supplied receive
