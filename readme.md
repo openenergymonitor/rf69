@@ -105,42 +105,15 @@ null key:
     rf.encrypt(0);
 
 **void send (uint8_t header, const void\* buffer, uint8_t bufferSize);**<br>
-Transmit the data of length len in the buffer pointed to by ptr. The data must not exceed
+Transmit the data of length bufferSize in the buffer pointed to by buffer. The data must not exceed
 62 bytes. Header is not normally required and should be zero. There is no return value.
 
-**int receive (void\* ptr, int len);**<br>
-Returns the actual size of the received packet (0 – 62 bytes). The caller-supplied receive
-buffer pointed to by ptr (of size len) must be large enough to hold the entire packet.
+**bool receiveDone ();**<br>
+Return true if a packet has been received. Used to signal to the main firmware that the packet data can be read. Packet properties are accessible in the following variables:
 
-
-
-**void txPower (uint8_t level);**<br>
-Sets the transmit power level. Level ranges from 0 – 31 representing -18 dBm to + 13
-dBm in steps of 1 dBm. The default is 25 (+7 dBm) to avoid damage to the RFM69 if no
-antenna is fitted. There is no return value.
-
-**uint8_t rssi;**<br>
-The received signal strength of the latest message, in steps of 0.5 dB below the reference
-level. i.e. to convert to the normal representation:
-
-    rfInfo.rssi = -rf.rssi/2;
-
-
-
-**void sleep ();**<br>
-Puts the radio module into sleep mode. There is no return value.
-
-Some other variables are available – refer to the source code for details.
-
-
-
-
-This driver is a patched version of the JeeLabs rf69.h driver. The changes are:
-
-1. The default transmit power has been lowered to +7 dBm in order to avoid damage
-to the radio module in the event that the transmitter ip operated without an efficient
-antenna.
-
-2. The point where the RSSI value is extracted has been moved because in the
-original position, the RSSI value of the previous message could occasionally be
-reported.
+    radio.DATALEN
+    radio.RSSI
+    radio.DATALEN
+    radio.PAYLOADLEN
+    radio.TARGETID
+    radio.SENDERID
