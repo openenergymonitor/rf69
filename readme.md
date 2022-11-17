@@ -1,5 +1,7 @@
 # RF69 Minimal JeeLib library
 
+**AVR-DB Microcontrollers only: EmonTx4 & EmonPi2**
+
 1. Supports transmitting data using the standard JeeLib packet format used by OpenEnergyMonitor hardware up to Nov 2022.
 
 2. Supports transmitting and receiving data using a patched version of the native JeeLabs rf69.h driver (Adapted from original by Robert Wall). This makes use of the in-built capabilities of the RFM69 module rather than emulating the RFM12 module via the compatibility mode provided by the standard JeeLib packet format. 
