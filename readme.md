@@ -57,4 +57,35 @@ Puts the radio module into sleep mode. There is no return value.
 
 Some other variables are available – refer to the source code for details.
 
-Documentation V1.0.0 for rf69.h V1.1.0 - 9/7/2021
+### Receiver example
+
+    #define Serial Serial3
+    #define EMONTX4
+    #include <RFM69_JeeLib.h>
+
+    RFM69 radio;
+
+    void setup() {
+      Serial.begin(115200);
+      Serial.println("JeeLib Native RX");
+      radio.initialize(RF69_433MHZ,5,210);
+      radio.encrypt("89txbe4p8aik5kt3");
+    }
+
+    void loop() {
+      if (radio.receiveDone())
+      {
+        Serial.print(F("OK")); 
+        Serial.print(F(" "));
+        Serial.print(radio.SENDERID, DEC);
+        Serial.print(F(" "));
+        for (byte i = 0; i < radio.DATALEN; i++) {
+          Serial.print((word)radio.DATA[i]);
+          Serial.print(F(" "));
+        }
+        Serial.print(F("("));
+        Serial.print(radio.readRSSI());
+        Serial.print(F(")"));
+        Serial.println();
+      }
+    }
