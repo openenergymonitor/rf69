@@ -36,7 +36,7 @@ class RFM69 {
   public:
     void format(uint8_t radioFormat = 2);
     bool initialize (uint8_t freq, uint8_t id, uint8_t group);
-    void send (uint8_t header, const void* ptr, int len);
+    void send (uint8_t header, const void* buffer, uint8_t bufferSize);
     bool receiveDone();
     void encrypt (const char* key);
     int16_t readRSSI(bool forceTrigger=false);
@@ -294,26 +294,25 @@ bool RFM69::receiveDone() {
 }
 
 void RFM69::wait_clear() {
-  #if RF69_CSMA_LIMIT_MS > 0
-  setMode(RF69_MODE_RX);
-  uint32_t now = millis();
-  while ((millis()-now) < RF69_CSMA_LIMIT_MS) {
-    while((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0);
-    if (readRSSI() < CSMA_LIMIT) break;
-    writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART);  // Restart the receiver
+  if (RF69_CSMA_LIMIT_MS > 0){
+    setMode(RF69_MODE_RX);
+    uint32_t now = millis();
+    while ((millis()-now) < RF69_CSMA_LIMIT_MS) {
+      while((readReg(REG_IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) == 0);
+      if (readRSSI() < CSMA_LIMIT) break;
+      writeReg(REG_PACKETCONFIG2, (readReg(REG_PACKETCONFIG2) & 0xFB) | RF_PACKET2_RXRESTART);  // Restart the receiver
+    }
   }
-  #endif
 }
 
-void RFM69::send (uint8_t header, const void* ptr, int len) {
-
-  uint32_t start = millis();
+void RFM69::send (uint8_t header, const void* buffer, uint8_t bufferSize) {
+  
   wait_clear();
   
   if (_radioFormat==1) {
-    sendFrame_v1(header,ptr,len);
+    sendFrame_v1(header,buffer,bufferSize);
   } else if (_radioFormat==2) {
-    sendFrame_v2(header,ptr,len);
+    sendFrame_v2(header,buffer,bufferSize);
   }
 }
 
