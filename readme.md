@@ -1,6 +1,6 @@
-# RF69 Minimal JeeLib library
+# RF69 Minimal JeeLib library (AVR-DB)
 
-**AVR-DB Microcontrollers only: EmonTx4 & EmonPi2**
+**AVR-DB Microcontrollers only**
 
 1. Supports transmitting data using the standard JeeLib packet format used by OpenEnergyMonitor hardware up to Nov 2022.
 
