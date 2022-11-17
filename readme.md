@@ -8,7 +8,7 @@
 
 Note on history: This library was originally based on a patched version of the JeeLib native rf69.h driver, adapted from original by Robert Wall. The latest version is based more closely on the LowPowerLabs RFM69 library implementation, while keeping the packet format the same.
 
-### Transmitter example
+## Transmitter example
 
     #define Serial Serial3
     #define EMONTX4
@@ -45,7 +45,7 @@ Note on history: This library was originally based on a patched version of the J
       delay(2000);
     }
 
-### Receiver example
+## Receiver example
 
     #define Serial Serial3
     #define EMONTX4
@@ -80,18 +80,30 @@ Note on history: This library was originally based on a patched version of the J
 
 ## API
 
+**void format (uint8_t format);**<br>
+This sets the transmit format to either JeeLib classic = 1 or JeeLib native = 2. Note that this library can only receive data sent using the JeeLib native format. This must be called before initialize. There is no return value.
+
 **void initialize (int freq, uint8_t id, uint8_t group);**<br>
 Initialises the driver with the NodeID, Group & Frequency. Node ID range is 1 – 60, 61 is
 send-only, 62 is reserved, 63 is receive-all. The OEM default group is 210. Frequency is in
-MHz and can have an arbitrary precision, e.g. 8686 = 868.6 MHz. There is no return value.
+MHz e.g 434 = 434 MHz. There is no return value.
+
+**void encrypt (const char\* key);**<br>
+Encrypts the data with a 16 character (max) / 128-bit key. If encryption is used, it must be
+used with the same key in all nodes in the same group. Encryption can be disabled with a
+null key:
+
+    rf.encrypt(0);
+
+**void send (uint8_t header, const void\* buffer, uint8_t bufferSize);**<br>
+Transmit the data of length len in the buffer pointed to by ptr. The data must not exceed
+62 bytes. Header is not normally required and should be zero. There is no return value.
 
 **int receive (void\* ptr, int len);**<br>
 Returns the actual size of the received packet (0 – 62 bytes). The caller-supplied receive
 buffer pointed to by ptr (of size len) must be large enough to hold the entire packet.
 
-**void send (uint8_t header, const void\* ptr, int len);**<br>
-Transmit the data of length len in the buffer pointed to by ptr. The data must not exceed
-62 bytes. Header is not normally required and should be zero. There is no return value.
+
 
 **void txPower (uint8_t level);**<br>
 Sets the transmit power level. Level ranges from 0 – 31 representing -18 dBm to + 13
@@ -104,12 +116,7 @@ level. i.e. to convert to the normal representation:
 
     rfInfo.rssi = -rf.rssi/2;
 
-**void encrypt (const char\* key);**<br>
-Encrypts the data with a 16 character (max) / 128-bit key. If encryption is used, it must be
-used with the same key in all nodes in the same group. Encryption can be disabled with a
-null key:
 
-    rf.encrypt(0);
 
 **void sleep ();**<br>
 Puts the radio module into sleep mode. There is no return value.
