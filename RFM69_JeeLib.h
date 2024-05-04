@@ -20,6 +20,13 @@
   #define MISOpin PIN_PA5
   #define SCKpin PIN_PA6
 #endif
+
+#ifdef EMONTX5
+  #define SSpin PIN_PA7
+  #define MOSIpin PIN_PA4
+  #define MISOpin PIN_PA5
+  #define SCKpin PIN_PA6
+#endif
      
 #ifdef EMONTX4
   #define SSpin PIN_PB5
